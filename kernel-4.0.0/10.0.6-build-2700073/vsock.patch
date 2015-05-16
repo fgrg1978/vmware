@@ -1,0 +1,95 @@
+diff -Npur vsock-only/linux/af_vsock.c vsock-only_fernando/linux/af_vsock.c
+--- vsock-only/linux/af_vsock.c	2015-04-28 20:05:57.000000000 +0200
++++ vsock-only_fernando/linux/af_vsock.c	2015-05-16 12:03:06.733508088 +0200
+@@ -4285,7 +4285,8 @@ VSockVmciDgramSendmsg(struct kiocb *kioc
+       goto out;
+    }
+ 
+-   memcpy_fromiovec(VMCI_DG_PAYLOAD(dg), msg->msg_iov, len);
++   copy_from_iter(VMCI_DG_PAYLOAD(dg), &msg->msg_iter.iov, len);
++
+ 
+    dg->dst = VMCI_MAKE_HANDLE(remoteAddr->svm_cid, remoteAddr->svm_port);
+    dg->src = VMCI_MAKE_HANDLE(vsk->localAddr.svm_cid, vsk->localAddr.svm_port);
+@@ -4645,7 +4646,7 @@ VSockVmciStreamSendmsg(struct kiocb *kio
+        * able to send.
+        */
+ 
+-      written = vmci_qpair_enquev(vsk->qpair, msg->msg_iov,
++      written = vmci_qpair_enquev(vsk->qpair, &msg->msg_iter.iov,
+                                   len - totalWritten, 0);
+       if (written < 0) {
+          err = -ENOMEM;
+@@ -4704,6 +4705,7 @@ VSockVmciDgramRecvmsg(struct kiocb *kioc
+    VMCIDatagram *dg;
+    size_t payloadLen;
+    struct sk_buff *skb;
++   struct iov_iter to;
+ 
+    sk = sock->sk;
+    noblock = flags & MSG_DONTWAIT;
+@@ -4742,7 +4744,9 @@ VSockVmciDgramRecvmsg(struct kiocb *kioc
+    }
+ 
+    /* Place the datagram payload in the user's iovec. */
+-   err = skb_copy_datagram_iovec(skb, sizeof *dg, msg->msg_iov, payloadLen);
++
++   iov_iter_init(&to, READ, msg->msg_iter.iov, 1, payloadLen);
++   err = skb_copy_datagram_iter(skb, 0, &to, payloadLen);
+    if (err) {
+       goto out;
+    }
+@@ -4888,9 +4892,9 @@ VSockVmciStreamRecvmsg(struct kiocb *kio
+          }
+ 
+          if (flags & MSG_PEEK) {
+-            read = vmci_qpair_peekv(vsk->qpair, msg->msg_iov, len - copied, 0);
++            read = vmci_qpair_peekv(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
+          } else {
+-            read = vmci_qpair_dequev(vsk->qpair, msg->msg_iov, len - copied, 0);
++            read = vmci_qpair_dequev(vsk->qpair, &msg->msg_iter.iov, len - copied, 0);
+          }
+ 
+          if (read < 0) {
+diff -Npur vsock-only/linux/notify.c vsock-only_fernando/linux/notify.c
+--- vsock-only/linux/notify.c	2015-04-28 20:05:57.000000000 +0200
++++ vsock-only_fernando/linux/notify.c	2015-05-16 12:06:16.541497105 +0200
+@@ -516,7 +516,7 @@ VSockVmciHandleWrote(struct sock *sk,
+    PKT_FIELD(vsk, sentWaitingRead) = FALSE;
+ #endif
+ 
+-   sk->sk_data_ready(sk, 0);
++   sk->sk_data_ready(sk);
+ }
+ 
+ 
+diff -Npur vsock-only/linux/notifyQState.c vsock-only_fernando/linux/notifyQState.c
+--- vsock-only/linux/notifyQState.c	2015-04-28 20:05:57.000000000 +0200
++++ vsock-only_fernando/linux/notifyQState.c	2015-05-16 12:05:55.853498302 +0200
+@@ -140,7 +140,7 @@ VSockVmciHandleRead(struct sock *sk,
+    sk->sk_write_space(sk);
+ }
+ 
+-
++/*
+ /*
+  *----------------------------------------------------------------------------
+  *
+@@ -164,7 +164,7 @@ VSockVmciHandleWrote(struct sock *sk,
+                      struct sockaddr_vm *dst,    // IN: unused
+                      struct sockaddr_vm *src)    // IN: unused
+ {
+-   sk->sk_data_ready(sk, 0);
++   sk->sk_data_ready(sk);
+ }
+ 
+ 
+@@ -566,7 +566,7 @@ VSockVmciNotifyPktRecvPostDequeue(struct
+       }
+ 
+       /* See the comment in VSockVmciNotifyPktSendPostEnqueue */
+-      sk->sk_data_ready(sk, 0);
++      sk->sk_data_ready(sk);
+    }
+ 
+    return err;

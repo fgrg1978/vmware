@@ -1,0 +1,41 @@
+diff -Npur vmnet-only/driver.c vmnet-only_fernando/driver.c
+--- vmnet-only/driver.c	2015-04-28 21:20:28.000000000 +0200
++++ vmnet-only_fernando/driver.c	2015-05-16 12:13:45.964984099 +0200
+@@ -1191,8 +1191,8 @@ VNetFileOpUnlockedIoctl(struct file    *
+    struct inode *inode = NULL;
+    long err;
+ 
+-   if (filp && filp->f_dentry) {
+-      inode = filp->f_dentry->d_inode;
++   if (filp) {
++      inode = file_inode(filp)
+    }
+    err = VNetFileOpIoctl(inode, filp, iocmd, ioarg);
+    return err;
+diff -Npur vmnet-only/netif.c vmnet-only_fernando/netif.c
+--- vmnet-only/netif.c	2015-04-28 21:20:28.000000000 +0200
++++ vmnet-only_fernando/netif.c	2015-05-16 12:13:43.062436267 +0200
+@@ -149,7 +149,7 @@ VNetNetIf_Create(char *devName,  // IN:
+    memcpy(deviceName, devName, sizeof deviceName);
+    NULL_TERMINATE_STRING(deviceName);
+ 
+-   dev = alloc_netdev(sizeof *netIf, deviceName, VNetNetIfSetup);
++   dev = alloc_netdev(sizeof *netIf, deviceName, NET_NAME_UNKNOWN, VNetNetIfSetup);
+    if (!dev) {
+       retval = -ENOMEM;
+       goto out;
+diff -Npur vmnet-only/userif.c vmnet-only_fernando/userif.c
+--- vmnet-only/userif.c	2015-04-28 21:20:28.000000000 +0200
++++ vmnet-only_fernando/userif.c	2015-05-16 12:13:44.319807194 +0200
+@@ -523,7 +523,10 @@ VNetCopyDatagram(const struct sk_buff *s
+       .iov_base = buf,
+       .iov_len  = len,
+    };
+-   return skb_copy_datagram_iovec(skb, 0, &iov, len);
++   struct iov_iter to;
++   iov_iter_init(&to, READ, &iov, 1, len);
++   return skb_copy_datagram_iter(skb, 0, &to, len);
++
+ }
+ 
+ 
