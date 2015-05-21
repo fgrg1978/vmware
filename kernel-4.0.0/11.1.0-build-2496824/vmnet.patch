@@ -1,0 +1,29 @@
+diff -Npur vmnet-only/driver.c vmnet-only_fernando/driver.c
+--- vmnet-only/driver.c	2015-02-07 01:54:17.000000000 +0100
++++ vmnet-only_fernando/driver.c	2015-05-21 14:59:44.498658011 +0200
+@@ -1191,8 +1191,8 @@ VNetFileOpUnlockedIoctl(struct file    *
+    struct inode *inode = NULL;
+    long err;
+ 
+-   if (filp && filp->f_dentry) {
+-      inode = filp->f_dentry->d_inode;
++   if (filp) {
++      inode = file_inode(filp);
+    }
+    err = VNetFileOpIoctl(inode, filp, iocmd, ioarg);
+    return err;
+diff -Npur vmnet-only/userif.c vmnet-only_fernando/userif.c
+--- vmnet-only/userif.c	2015-02-07 01:54:17.000000000 +0100
++++ vmnet-only_fernando/userif.c	2015-05-21 14:58:58.362657199 +0200
+@@ -523,7 +523,10 @@ VNetCopyDatagram(const struct sk_buff *s
+       .iov_base = buf,
+       .iov_len  = len,
+    };
+-   return skb_copy_datagram_iovec(skb, 0, &iov, len);
++   struct iov_iter to;
++   iov_iter_init(&to, READ, &iov, 1, len);
++   return skb_copy_datagram_iter(skb, 0, &to, len);
++
+ }
+ 
+ 
